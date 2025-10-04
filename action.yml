@@ -69,6 +69,9 @@ inputs:
     description: "Setup the last installed toolchain as the default via `rustup override`"
     required: false
     default: "true"
+  rust-src-dir:
+    description: "Specify path from root directory to the Rust source directory. By default root directory will be used."
+    required: false
 
 outputs:
   rustc-version:
@@ -163,9 +166,23 @@ runs:
         targets: ${{inputs.target}}
         components: ${{inputs.components}}
         override: ${{inputs.override}}
+        rust_src_dir: ${{inputs.rust-src-dir}}
       shell: bash
       run: |
-        if [[ -z "$toolchain" && ( -f "rust-toolchain" || -f "rust-toolchain.toml" ) ]]
+        # Check if value is set
+        if [[ -n "$rust_src_dir" ]]
+        then
+          # If value is set the directory must exist
+          if [[ -d "$rust_src_dir" ]]
+          then
+            cd "$rust_src_dir"
+          else
+            echo "'rust-src-dir' does not point to an existing directory" >&2
+            echo "The value of 'rust-src-dir' is: ${rust_src_dir}" >&2
+            exit 1
+          fi
+        fi
+        if [[ -z "$toolchain" && ( -f "rust-toolchain" || -f "rust-toolchain.toml") ]]
         then
           # Install the toolchain as specified in the file
           # rustup show is the old way that implicitly installed a toolchain
@@ -194,6 +211,8 @@ runs:
     - id: versions
       name: Print installed versions
       shell: bash
+      # Switch to the Rust sub-directory
+      working-directory: ${{inputs.rust-src-dir || '.'}}
       run: |
         echo "rustc-version=$(rustc --version)" >> $GITHUB_OUTPUT
         rustc --version --verbose
@@ -220,9 +239,9 @@ runs:
 
     - name: Setup Rust Caching
       if: inputs.cache == 'true'
-      uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+      uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
       with:
-        workspaces: ${{inputs.cache-workspaces}}
+        workspaces: ${{ inputs.cache-workspaces || inputs.rust-src-dir }}
         cache-directories: ${{inputs.cache-directories}}
         cache-on-failure: ${{inputs.cache-on-failure}}
         cache-bin: ${{inputs.cache-bin}}
